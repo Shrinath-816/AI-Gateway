@@ -69,6 +69,23 @@ def get_llm_client(request: Request) -> LLMClient:
     """FastAPI dependency: retrieve the shared LLMClient from app state."""
     return request.app.state.llm_client
 
+# 1. What async def Does ExactlyNormally, Python code runs sequentially (synchronously). 
+# If a function needs to wait for something—like a database query, an external API call, 
+# or reading a file—the entire program pauses and waits for that task to finish. 
+# This is called blocking.When you put async in front of def:
+# It tells Python that this function is allowed to pause its execution internally using the await keyword.While this function is waiting for an external task to finish,
+# the Python process doesn't sit idle. It temporarily switches to work on other incoming requests.
+
+# 2. Why It Is Used in Your Web ServerWeb servers handle requests from many users at the same time.
+# Without async (Synchronous): 
+# If User A sends a request to your /chat/sync endpoint that takes 5 seconds to get a response from an LLM provider (like OpenAI or Anthropic), 
+# the server is entirely blocked. If User B tries to access the /health endpoint during those 5 seconds, 
+# they have to wait until User A is completely finished.
+# With async (Asynchronous): When User A's request hits the LLM client, the server pauses User A's task, 
+# frees up the CPU, handles User B's /health check instantly, and then returns to finish User A's task once the LLM responds.
+
+
+
 
 @app.get("/health")
 async def health() -> dict[str, str]:
@@ -175,6 +192,16 @@ async def chat_stream(
                 # no point paying for tokens nobody will read.
                 if await request.is_disconnected():
                     break
+
+
+                # We use yield here to enable real-time streaming of text chunks.
+                # In Python, the yield keyword turns a regular function into a generator, 
+                # which sends data back to the caller piece by piece without stopping the entire function.What yield Does in This CodePauses,
+                # doesn't stop: Unlike return (which kills the function after one execution), 
+                # yield sends the current text chunk (text_delta) to the client and pauses the function.
+
+                # Resumes on next chunk: When the next piece of text arrives from the AI model, 
+                # the function picks up exactly where it left off to send the new chunk.
 
                 if text_delta is not None:
                     # SSE wire format: each event is "data: <payload>\n\n"
