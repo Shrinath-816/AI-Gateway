@@ -130,6 +130,7 @@ class LLMClient:
             by that point OpenRouter's `choices` delta is content-free,
             it only carries the finish_reason and usage.
         """
+        # Read each streamed chunk from the LLM and yield it immediately with its token usage.
         async for chunk, usage in self._stream_chunks(model, prompt, max_tokens):
             yield chunk, usage
 
@@ -141,6 +142,7 @@ class LLMClient:
         stream and yields (text_delta, usage) pairs, exactly one of
         which is non-None per yielded pair.
         """
+        # Send the prompt to the LLM and enable streaming so the response arrives chunk by chunk.
         stream = await self._client.chat.completions.create(
             model=model,
             messages=[{"role": "user", "content": prompt}],
@@ -148,21 +150,33 @@ class LLMClient:
             stream=True,
         )
 
+        # Read each streamed chunk from the LLM and yield it immediately with its token usage.
         async for event in stream:
             # OpenRouter's final SSE chunk carries usage and has an
             # empty/content-free delta rather than new text.
+            # Read each event from the LLM stream as it arrives.
+
+            # OpenRouter sends usage information in the final event,
+            # which usually contains no new text content.
+
+            # Check whether this event contains token usage information.
             if getattr(event, "usage", None) is not None:
+                
+                # Create our own usage object from OpenRouter's usage data.
                 usage = UsageInfo(
                     prompt_tokens=event.usage.prompt_tokens,
                     completion_tokens=event.usage.completion_tokens,
                     total_tokens=event.usage.total_tokens,
                 )
+                # Send the usage information to the caller; there is no text chunk.
                 yield None, usage
-                continue
+                continue  # Skip the remaining code and move to the next stream event.
 
+            # If this event contains text content, extract it.
+             # Extract newly generated text from the event, if a choice exists.
             delta = event.choices[0].delta.content if event.choices else None
-            if delta:
-                yield delta, None
+            if delta: # Only process the event if it contains actual text.
+                yield delta, None # Immediately send the text chunk to the caller; no usage data here.
 
     async def close(self) -> None:
         """Release the underlying HTTP client's connections cleanly."""

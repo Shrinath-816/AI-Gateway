@@ -43,7 +43,7 @@ router = ModelTierRouter()
 cost_calculator = CostCalculator()
 usage_tracker = UsageTracker()
 
-
+# @asynccontextmanager: manages async startup and shutdown resources cleanly.
 @asynccontextmanager
 async def lifespan(app: FastAPI) -> AsyncIterator[None]:
     """
@@ -51,10 +51,10 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:
     settings once, failing fast if OPENROUTER_API_KEY is missing) and
     close its underlying HTTP connections cleanly on shutdown.
     """
-    settings = get_settings()
-    app.state.llm_client = LLMClient(settings)
-    yield
-    await app.state.llm_client.close()
+    settings = get_settings()# Load configuration once at startup.
+    app.state.llm_client = LLMClient(settings) # Create and store the shared LLM client.
+    yield                     # Application runs here while the client is available.
+    await app.state.llm_client.close() # Shutdown: close the client's HTTP connections.
 
 
 app = FastAPI(
@@ -205,7 +205,9 @@ async def chat_stream(
 
                 if text_delta is not None:
                     # SSE wire format: each event is "data: <payload>\n\n"
-                    yield f"data: {text_delta}\n\n"
+                    # If the LLM produced a text chunk, format it as an SSE event.
+                    # SSE sends each event as "data: <payload>" followed by a blank line.
+                    yield f"data: {text_delta}\n\n"  # Immediately send this chunk to the client so it can render it in real time.
 
                 if usage is not None:
                     latency_ms = timer.stop()
